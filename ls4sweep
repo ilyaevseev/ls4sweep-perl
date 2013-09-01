@@ -1,0 +1,54 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+
+sub usage() {
+	die "Usage: $0 policy files...\n"
+	   ."Policy: periods_count1:period_duration1,p2:d2,...\n"
+	   ."Example: ls4sweep 7:1,3:7,11:30,100:360 *.zip\n";
+}
+
+my $verbose = (@ARGV and $ARGV[0] eq '--verbose') ? shift @ARGV : undef;
+
+usage if @ARGV < 2;
+
+my $now = time;
+my $polstr = shift @ARGV;
+my @policy;  # { DURATION=>value, FILES=> { name=>mtime, ... } }
+my @oldest;
+
+foreach (split /[,;] */, $polstr) {
+	die "Wrong policy token: $_\n" unless /^(\d+)[:=]\s*(\d+)\s*$/;
+	my ($periods_count, $period_duration) = ($1, $2);
+	push @policy, { DURATION => $period_duration, FILES => {} }
+		foreach 1..$periods_count;
+}
+
+# Attach files to periods..
+foreach my $filename (@ARGV) {
+	my ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,$atime,$mtime,$ctime,$blksize,$blocks) = stat($filename);
+	my $delta = $now - $mtime;
+	foreach my $token (@policy) {
+		$delta -= $token->{DURATION} * 86400;
+		next if $delta > 0;
+		my $files = $token->{FILES};
+		$files->{$filename} = $mtime;
+		last;
+	}
+	push @oldest, $filename if $delta > 0;
+}
+
+# For each period, print all filenames except oldiest..
+foreach my $token (@policy) {
+	my $files = $token->{FILES};
+	my @sorted = sort { $files->{$b} <=> $files->{$a} } keys %$files;
+	my $oldest = shift @sorted;  # ..skip oldest file
+	printf STDERR "%d : keep %s\n", $token->{DURATION}, $oldest || 'none' if $verbose;
+	print "$_\n" foreach @sorted;
+}
+
+print STDERR "Oldest files:\n" if $verbose;
+print "$_\n" foreach @oldest;
+
+## EOF ##
