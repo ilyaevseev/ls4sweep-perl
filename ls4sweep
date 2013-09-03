@@ -58,7 +58,7 @@ foreach (split /[,;] */, $polstr) {
 
 # Attach files to periods..
 foreach my $filename (@ARGV) {
-	next unless -f $filename;  # ..protect against non-matching wildcards passed from shell to me.
+	next unless -e $filename;  # ..protect against non-matching wildcards passed from shell to me.
 	my ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,$atime,$mtime,$ctime,$blksize,$blocks) = stat($filename);
 	my $delta = $now - ($use_ctime ? $ctime : $mtime);
 	foreach my $token (@policy) {
