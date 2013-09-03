@@ -1,17 +1,48 @@
 #!/usr/bin/perl
+#
+#  ls4sweep -- tool for removing old backups.
+#
+#  ls4sweep is a tool intended for use as helper for removing old backups.
+#  A sweeping policy consists of a set of records that contains
+#  the number of intervals or a periods in days to retain.
+#  It checks creation or modification time of given files
+#  and displays names of those when they don't match the policy.
+#  The output can then be passed to rm.
+#
+#  Written by ilya.evseev@gmail.com
+#  Distributed as public domain.
+#  Site: https://code.google.com/p/ls4sweep-perl/
+#
+
 
 use strict;
 use warnings;
 
-sub usage() {
-	die "Usage: $0 policy files...\n"
+sub usage {
+	print STDERR "ERROR: @_\n" if @_;
+	die "Usage: $0 [options] policy files...\n"
 	   ."Policy: periods_count1:period_duration1,p2:d2,...\n"
+	   ."Options: -0, --ctime, --verbose\n"
 	   ."Example: ls4sweep 7:1,3:7,11:30,100:360 *.zip\n";
 }
 
-my $verbose = (@ARGV and $ARGV[0] eq '--verbose') ? shift @ARGV : undef;
+my $verbose;
+my $use_ctime;
+my $linesep = "\n";
 
-usage if @ARGV < 2;
+while (@ARGV and $ARGV[0] =~ /^-/) {
+	my $s = shift @ARGV;
+	if ($s eq '-0') {
+		$linesep = "\0";
+	} elsif ($s eq '--verbose') {
+		$verbose = 1;
+	} elsif ($s eq '--ctime') {
+		$use_ctime = 1;
+	}
+}
+
+usage unless @ARGV;
+usage "Missing files" if @ARGV < 2;
 
 my $now = time;
 my $polstr = shift @ARGV;
@@ -27,13 +58,14 @@ foreach (split /[,;] */, $polstr) {
 
 # Attach files to periods..
 foreach my $filename (@ARGV) {
+	next unless -f $filename;  # ..protect against non-matching wildcards passed from shell to me.
 	my ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,$atime,$mtime,$ctime,$blksize,$blocks) = stat($filename);
-	my $delta = $now - $mtime;
+	my $delta = $now - ($use_ctime ? $ctime : $mtime);
 	foreach my $token (@policy) {
 		$delta -= $token->{DURATION} * 86400;
 		next if $delta > 0;
 		my $files = $token->{FILES};
-		$files->{$filename} = $mtime;
+		$files->{$filename} = ($use_ctime ? $ctime : $mtime);
 		last;
 	}
 	push @oldest, $filename if $delta > 0;
@@ -45,10 +77,10 @@ foreach my $token (@policy) {
 	my @sorted = sort { $files->{$b} <=> $files->{$a} } keys %$files;
 	my $oldest = shift @sorted;  # ..skip oldest file
 	printf STDERR "%d : keep %s\n", $token->{DURATION}, $oldest || 'none' if $verbose;
-	print "$_\n" foreach @sorted;
+	printf "%s%s", $_, $linesep foreach @sorted;
 }
 
 print STDERR "Oldest files:\n" if $verbose;
-print "$_\n" foreach @oldest;
+printf "%s%s", $_, $linesep foreach @oldest;
 
 ## EOF ##
