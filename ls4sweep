@@ -14,9 +14,10 @@
 #  Site: https://code.google.com/p/ls4sweep-perl/
 #
 
-
 use strict;
 use warnings;
+
+use Time::Local;
 
 sub usage {
 	print STDERR "ERROR: @_\n" if @_;
@@ -45,6 +46,12 @@ usage unless @ARGV;
 usage "Missing files" if @ARGV < 2;
 
 my $now = time;
+my @localnow = localtime($now);    # See http://stackoverflow.com/a/2143609/2743554
+my $tzoffset = timegm(@localnow) - timelocal(@localnow);
+
+sub secs2days($) { int( ($_[0] + $tzoffset) / 86400 ) }
+my $nowday = secs2days($now);
+
 my $polstr = shift @ARGV;
 my @policy;  # { DURATION=>value, FILES=> { name=>mtime, ... } }
 my @oldest;
@@ -60,23 +67,26 @@ foreach (split /[,;] */, $polstr) {
 foreach my $filename (@ARGV) {
 	next unless -e $filename;  # ..protect against non-matching wildcards passed from shell to me.
 	my ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,$atime,$mtime,$ctime,$blksize,$blocks) = stat($filename);
-	my $delta = $now - ($use_ctime ? $ctime : $mtime);
+	my $ftime = secs2days($use_ctime ? $ctime : $mtime);
+	my $delta = $nowday - $ftime;
 	foreach my $token (@policy) {
-		$delta -= $token->{DURATION} * 86400;
-		next if $delta > 0;
+		$delta -= $token->{DURATION};
+		next if $delta >= 0;
 		my $files = $token->{FILES};
-		$files->{$filename} = ($use_ctime ? $ctime : $mtime);
+		$files->{$filename} = $ftime;
 		last;
 	}
-	push @oldest, $filename if $delta > 0;
+	push @oldest, $filename if $delta >= 0;
 }
 
 # For each period, print all filenames except oldiest..
 foreach my $token (@policy) {
 	my $files = $token->{FILES};
-	my @sorted = sort { $files->{$b} <=> $files->{$a} } keys %$files;
+	my @sorted = sort { $files->{$a} <=> $files->{$b} } keys %$files;
 	my $oldest = shift @sorted;  # ..skip oldest file
-	printf STDERR "%d : keep %s\n", $token->{DURATION}, $oldest || 'none' if $verbose;
+	printf STDERR "%d : keep %s, remove %s\n",
+		$token->{DURATION}, $oldest || 'none', @sorted ? "@sorted" : 'none'
+		if $verbose;
 	printf "%s%s", $_, $linesep foreach @sorted;
 }
 
