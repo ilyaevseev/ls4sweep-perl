@@ -29,6 +29,7 @@ sub usage {
 
 my $verbose;
 my $use_ctime;
+my $use_namestamp;
 my $linesep = "\n";
 
 while (@ARGV and $ARGV[0] =~ /^-/) {
@@ -39,6 +40,8 @@ while (@ARGV and $ARGV[0] =~ /^-/) {
 		$verbose = 1;
 	} elsif ($s eq '--ctime') {
 		$use_ctime = 1;
+	} elsif ($s eq '--namestamp') {
+		$use_namestamp = 1;
 	}
 }
 
@@ -68,6 +71,7 @@ foreach my $filename (@ARGV) {
 	next unless -e $filename;  # ..protect against non-matching wildcards passed from shell to me.
 	my ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,$atime,$mtime,$ctime,$blksize,$blocks) = stat($filename);
 	my $ftime = secs2days($use_ctime ? $ctime : $mtime);
+	$ftime = int(timelocal(0, 0, 0, $3, $2-1, $1) / 86400) if $use_namestamp and $filename =~ /(\d\d\d\d)[\.\-]?(\d\d)[\.\-]?(\d\d)/;
 	my $delta = $nowday - $ftime;
 	foreach my $token (@policy) {
 		$delta -= $token->{DURATION};

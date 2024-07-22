@@ -1,0 +1,21 @@
+#!/bin/bash
+
+N=60
+dir0=`dirname $0`
+ls4sweep=$dir0/ls4sweep
+now=`date +%s`
+
+test -x $ls4sweep || { echo "Error: cannot find $ls4sweep" 1>&2; exit 1; }
+
+D=`mktemp -d -t ls4sweep_test.XXXX`
+trap "rm -rf $D" EXIT
+echo "Running in directory $D"
+
+for (( i = 0; i < N ; i++ )); do
+	echo $i > "$D/$i-$(date +%Y-%m-%d-%H%M -d "$i days ago").tmp"
+done
+
+$ls4sweep --verbose --namestamp '3:1, 3:3, 3:10, 3:30' $D/*.tmp
+echo Return code = $?
+
+## EOF ##
